@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 import xml.dom.minidom
 import numpy as np
 import random
+import math
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -17,38 +18,66 @@ def func(y):
 
 class Link:
 
-    def __init__(self, name, numberOfFlows):
+    def __init__(self, name, flowLoad):
         self.name = name
-        self.numberOfFlows = numberOfFlows
+        self.flowLoad = flowLoad
 
 
-def evaluationFunction(specimen):
-    numberOfSystems = 0
-
-    listOfLinks = []
-
-    # TODO: finish
-    for i,flowsForDemand in enumerate(specimen):
-        print(i)
-
-
-
-
-    return numberOfSystems
 
 
 
 class DE:
 
     def __init__(self, demands, populationSize = 100, crossoverProbability = 0.9,
-                 differentialWeight = 0.8, penaltyFactor = 0.1, maxfes = 2000, evaluationFunction = staticmethod(func)):
+                 differentialWeight = 0.8, penaltyFactor = 100, maxfes = 200,
+                 penaltyForBadFlow = 100, modularity = 1):
         self.populationSize = populationSize
         self.crossoverProbability = crossoverProbability
         self.differentialWeight = differentialWeight
         self.penaltyFactor = penaltyFactor
         self.maxfes = maxfes
-        self.evaluationFunction = evaluationFunction
+        self.evaluationFunction = self.evaluationFunction
         self.demands = demands
+        self.penaltyForBadFlow = penaltyForBadFlow
+        self.modularity = modularity
+
+    @staticmethod
+    def evaluationFunction(specimen, modularity):
+        numberOfSystems = 0
+
+        listOfLinks = []
+
+        # add all loads on links to list
+        for i, flowsForDemand in enumerate(specimen):
+            for j, flow in enumerate(flowsForDemand):
+
+
+                if flow <= 0:
+                    continue
+
+
+                correspondingPath = demands[i].admissiblePaths[j]
+                for link in correspondingPath:
+                    linkExists = False
+                    linkIndex = 0
+                    for index, l in enumerate(listOfLinks):
+                        if l.name == link:
+                            linkExists = True
+                            linkIndex = index
+
+                    if linkExists:
+                        listOfLinks[linkIndex].flowLoad += flow
+
+                    listOfLinks.append(Link(link, flow))
+
+        # for every loaded link add system depending on modularity
+        for link in listOfLinks:
+            numberOfSystems += math.ceil(link.flowLoad / modularity)
+
+        return numberOfSystems
+
+
+
 
     def initialization(self):
         return np.random.randint(minValue, maxValue, (self.populationSize, numberOfDemands, maxPathNumber))
@@ -76,31 +105,43 @@ class DE:
 
     def constraintViolation(self, indexOfDemand, flows):
         sumOfFlows = flows.sum()
-        value = sumOfFlows - self.demands[indexOfDemand].demandValue
+        value = int(sumOfFlows) - self.demands[indexOfDemand].demandValue
 
         if -sumOfFlows > value:
             value = -sumOfFlows
 
-        # TODO: finnish
-        for path in self.demands[indexOfDemand].admissiblePaths:
-            print(path)
+        # if sumOfFlows != self.demands[indexOfDemand].demandValue:
+        #     value = self.penaltyForBadFlow
 
-
+        # numberOfPaths = len(self.demands[indexOfDemand].admissiblePaths)
+        # numberOfBadFlows = 0
+        # for i,flow in enumerate(flows):
+        #     if flow > 0 and i > numberOfPaths:
+        #         numberOfBadFlows += 1
+        #
+        # value += self.penaltyForBadFlow * numberOfBadFlows
+        # print(value)
         return value
 
 
     def penalty(self, specimen):
         arr = np.array([self.penaltyFactor * max(0, self.constraintViolation(i,x)) for i,x in enumerate(specimen)])
         penaltyValue = arr.sum()
+        # print(penaltyValue)
         return penaltyValue
 
 
     def evaluate(self, trialVector, specimen, population):
-        x_val = self.evaluationFunction(specimen)
-        y_val = self.evaluationFunction(trialVector)
+        x_val = self.evaluationFunction(specimen, self.modularity)
+        y_val = self.evaluationFunction(trialVector, self.modularity)
+        print(x_val)
+        print(y_val)
 
         x_val += self.penalty(specimen)
         y_val += self.penalty(trialVector)
+
+        print(x_val)
+        print(y_val)
         if y_val <= x_val:
             population[np.where( population == specimen )[0][0]] = trialVector
 
@@ -116,7 +157,11 @@ class DE:
                 trialVector = self.crossover(specimen, donorVector)
                 self.evaluate(trialVector, specimen, population)
                 fes+=1
+                print_hi(fes)
+
+
             generationNum+=1
+        generationNum = 0
         return population
 
 
@@ -132,7 +177,7 @@ class Demand:
     def print(self):
         print("Source: " + self.source)
         print("Target: " + self.target)
-        print("DemandValue: " + self.demandValue)
+        print("DemandValue: " + str(self.demandValue))
         print("AdmissiblePaths: ")
         for i,path in enumerate(self.admissiblePaths):
             print(" Path"+str(i)+": ")
@@ -153,7 +198,7 @@ def getDemandsFromDoc(doc):
 
         demands.append(Demand(d.getElementsByTagName('source')[0].firstChild.data,
                               d.getElementsByTagName('target')[0].firstChild.data,
-                              d.getElementsByTagName('demandValue')[0].firstChild.data,
+                              int(float(d.getElementsByTagName('demandValue')[0].firstChild.data)),
                               pathList
                               ))
     return demands
@@ -164,8 +209,8 @@ if __name__ == '__main__':
 
     demands = getDemandsFromDoc(doc)
 
-    for d in demands:
-        d.print()
+    # for d in demands:
+    #     d.print()
 
     global minValue
     minValue = 0
@@ -175,6 +220,19 @@ if __name__ == '__main__':
     numberOfDemands = len(demands)
     global maxPathNumber
     maxPathNumber = 7
+    global generationNum
+    generationNum = 0
 
+    modularity = 1
+    DEalgorithm = DE(demands, modularity=modularity)
+    population = DEalgorithm.run()
+
+    best = population[0]
+    for specimen in population:
+        if DE.evaluationFunction(specimen,modularity) < DE.evaluationFunction(best,modularity):
+            best = specimen
+
+    print(best)
+    print(DE.evaluationFunction(best,modularity))
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
