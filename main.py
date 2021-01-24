@@ -28,33 +28,35 @@ class Link:
 
 class DE:
 
-    def __init__(self, demands, populationSize = 100, crossoverProbability = 0.9,
-                 differentialWeight = 0.8, penaltyFactor = 100, maxfes = 200,
+    def __init__(self, demands, populationSize = 100, crossoverProbability = 0.7,
+                 differentialWeight = 0.2, penaltyFactor = 100, maxGeneration = 500,
                  penaltyForBadFlow = 100, modularity = 1):
         self.populationSize = populationSize
         self.crossoverProbability = crossoverProbability
         self.differentialWeight = differentialWeight
         self.penaltyFactor = penaltyFactor
-        self.maxfes = maxfes
-        self.evaluationFunction = self.evaluationFunction
+        self.maxGeneration = maxGeneration
         self.demands = demands
         self.penaltyForBadFlow = penaltyForBadFlow
         self.modularity = modularity
+        self.maxPathNumber = 7
+        self.minValue = 0
+        self.maxValue = max([x.demandValue for x in demands])
+        self.numberOfDemands = len(demands)
 
-    @staticmethod
-    def evaluationFunction(specimen, modularity):
+
+    def evaluationFunction(self, specimen):
         numberOfSystems = 0
 
         listOfLinks = []
 
         # add all loads on links to list
         for i, flowsForDemand in enumerate(specimen):
-            for j, flow in enumerate(flowsForDemand):
 
+            for j, flow in enumerate(flowsForDemand):
 
                 if flow <= 0:
                     continue
-
 
                 correspondingPath = demands[i].admissiblePaths[j]
                 for link in correspondingPath:
@@ -64,15 +66,16 @@ class DE:
                         if l.name == link:
                             linkExists = True
                             linkIndex = index
+                            break
 
                     if linkExists:
                         listOfLinks[linkIndex].flowLoad += flow
-
-                    listOfLinks.append(Link(link, flow))
+                    else:
+                        listOfLinks.append(Link(link, flow))
 
         # for every loaded link add system depending on modularity
         for link in listOfLinks:
-            numberOfSystems += math.ceil(link.flowLoad / modularity)
+            numberOfSystems += math.ceil(link.flowLoad / self.modularity)
 
         return numberOfSystems
 
@@ -80,7 +83,7 @@ class DE:
 
 
     def initialization(self):
-        return np.random.randint(minValue, maxValue, (self.populationSize, numberOfDemands, maxPathNumber))
+        return np.random.randint(self.minValue, self.maxValue, (self.populationSize, self.numberOfDemands, self.maxPathNumber))
 
 
     def generate(self, population, index):
@@ -92,15 +95,16 @@ class DE:
     def mutation(self, individuals):
         donorVector = np.add(individuals[0],
                              self.differentialWeight * np.array(np.subtract(individuals[1], individuals[2])))
+
         return donorVector
 
 
     def crossover(self, specimen, donorVector):
-        randomI = random.sample(range(numberOfDemands), 1)
+        randomI = random.sample(range(self.numberOfDemands), 1)
         trialVector = [
             donorVector[i] if random.uniform(0, 1) <= self.crossoverProbability or i == randomI else specimen[i] for i
-            in range(numberOfDemands)]
-        return trialVector
+            in range(self.numberOfDemands)]
+        return np.array(trialVector)
 
 
     def constraintViolation(self, indexOfDemand, flows):
@@ -110,17 +114,6 @@ class DE:
         if -sumOfFlows > value:
             value = -sumOfFlows
 
-        # if sumOfFlows != self.demands[indexOfDemand].demandValue:
-        #     value = self.penaltyForBadFlow
-
-        # numberOfPaths = len(self.demands[indexOfDemand].admissiblePaths)
-        # numberOfBadFlows = 0
-        # for i,flow in enumerate(flows):
-        #     if flow > 0 and i > numberOfPaths:
-        #         numberOfBadFlows += 1
-        #
-        # value += self.penaltyForBadFlow * numberOfBadFlows
-        # print(value)
         return value
 
 
@@ -131,37 +124,55 @@ class DE:
         return penaltyValue
 
 
-    def evaluate(self, trialVector, specimen, population):
-        x_val = self.evaluationFunction(specimen, self.modularity)
-        y_val = self.evaluationFunction(trialVector, self.modularity)
-        print(x_val)
-        print(y_val)
+    def evaluate(self, trialVector, specimen, population, index):
+        x_val = self.evaluationFunction(specimen)
+        y_val = self.evaluationFunction(trialVector)
 
-        x_val += self.penalty(specimen)
-        y_val += self.penalty(trialVector)
-
-        print(x_val)
-        print(y_val)
+        # print(x_val)
+        # print(y_val)
         if y_val <= x_val:
-            population[np.where( population == specimen )[0][0]] = trialVector
+            population[index] = trialVector
 
+
+    def repair(self, specimen):
+        for demand in specimen:
+            for i, flow in enumerate(demand):
+                if demand[i] < 0:
+                    demand[i] *= -1
+
+
+        for i, demand in enumerate(specimen):
+            # demands[i].demandValue # suma do ktorej dazymy
+            ratio = demands[i].demandValue / np.sum(demand)
+
+            # print(demand)
+
+            for j, flow in enumerate(demand):
+                demand[j] = round(demand[j] * ratio)
+
+            # print(demand)
+
+            # print(np.sum(specimen[i]))
+            # print(demands[i].demandValue)
+
+        return specimen
 
     def run(self):
-        global generationNum
         population = self.initialization()
-        fes = 0
-        while fes < self.maxfes:
-            for specimen in population:
-                individuals = self.generate(population, np.where( population == specimen )[0][0])
+        for i, specimen in enumerate(population.tolist()):
+            population[i] = self.repair(specimen)
+        generation = 0
+        while generation < self.maxGeneration:
+            for i, specimen in enumerate(population.tolist()):
+                specimenIndex = i
+                individuals = self.generate(population, specimenIndex)
                 donorVector = self.mutation(individuals)
+                donorVector = self.repair(donorVector)
                 trialVector = self.crossover(specimen, donorVector)
-                self.evaluate(trialVector, specimen, population)
-                fes+=1
-                print_hi(fes)
+                self.evaluate(trialVector, specimen, population, specimenIndex)
+            generation+=1
+            print_hi(generation)
 
-
-            generationNum+=1
-        generationNum = 0
         return population
 
 
@@ -209,30 +220,21 @@ if __name__ == '__main__':
 
     demands = getDemandsFromDoc(doc)
 
+    # value = 0
     # for d in demands:
-    #     d.print()
+    #     value += d.demandValue
+    # print(value)
 
-    global minValue
-    minValue = 0
-    global maxValue
-    maxValue = max([ x.demandValue for x in demands ])
-    global numberOfDemands
-    numberOfDemands = len(demands)
-    global maxPathNumber
-    maxPathNumber = 7
-    global generationNum
-    generationNum = 0
 
-    modularity = 1
-    DEalgorithm = DE(demands, modularity=modularity)
+    DEalgorithm = DE(demands)
     population = DEalgorithm.run()
 
     best = population[0]
     for specimen in population:
-        if DE.evaluationFunction(specimen,modularity) < DE.evaluationFunction(best,modularity):
+        if DE.evaluationFunction(DEalgorithm,specimen) < DE.evaluationFunction(DEalgorithm,best):
             best = specimen
 
     print(best)
-    print(DE.evaluationFunction(best,modularity))
+    print(DE.evaluationFunction(DEalgorithm,best))
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
