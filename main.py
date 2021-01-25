@@ -7,6 +7,7 @@ import xml.dom.minidom
 import numpy as np
 import random
 import math
+import copy
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -29,8 +30,8 @@ class Link:
 class DE:
 
     def __init__(self, demands, populationSize = 100, crossoverProbability = 0.7,
-                 differentialWeight = 0.2, penaltyFactor = 100, maxGeneration = 500,
-                 penaltyForBadFlow = 100, modularity = 1):
+                 differentialWeight = 0.2, penaltyFactor = 100, maxGeneration = 2000,
+                 penaltyForBadFlow = 100, modularity = 500, aggregateFlows = True):
         self.populationSize = populationSize
         self.crossoverProbability = crossoverProbability
         self.differentialWeight = differentialWeight
@@ -38,6 +39,7 @@ class DE:
         self.maxGeneration = maxGeneration
         self.demands = demands
         self.penaltyForBadFlow = penaltyForBadFlow
+        self.aggregateFlows = aggregateFlows
         self.modularity = modularity
         self.maxPathNumber = 7
         self.minValue = 0
@@ -92,9 +94,26 @@ class DE:
         return individuals
 
 
-    def mutation(self, individuals):
+    def mutationDE(self, individuals):
         donorVector = np.add(individuals[0],
                              self.differentialWeight * np.array(np.subtract(individuals[1], individuals[2])))
+
+        return donorVector
+
+    def mutation(self, specimen):
+        donorVector = copy.deepcopy(specimen)
+
+        i = random.randint(0,self.numberOfDemands-1)
+        j = random.randint(0,self.maxPathNumber-1)
+
+        indexOfFlow =0
+        for index, flow in enumerate(specimen[i]):
+            if flow > 0:
+                indexOfFlow = index
+
+        donorVector[i][indexOfFlow] = 0
+
+        donorVector[i][j] = specimen[i][indexOfFlow]
 
         return donorVector
 
@@ -120,7 +139,6 @@ class DE:
     def penalty(self, specimen):
         arr = np.array([self.penaltyFactor * max(0, self.constraintViolation(i,x)) for i,x in enumerate(specimen)])
         penaltyValue = arr.sum()
-        # print(penaltyValue)
         return penaltyValue
 
 
@@ -134,26 +152,39 @@ class DE:
             population[index] = trialVector
 
 
+
+
     def repair(self, specimen):
         for demand in specimen:
             for i, flow in enumerate(demand):
                 if demand[i] < 0:
                     demand[i] *= -1
 
+        if self.aggregateFlows:
+            for i, demand in enumerate(specimen):
+                maxIndex = 0
+                max = -1
+                for j, flow in enumerate(demand):
+                    if flow > max:
+                        maxIndex = j
+                        max = flow
+                    demand[j] = 0
+                demand[maxIndex] = demands[i].demandValue
 
-        for i, demand in enumerate(specimen):
-            # demands[i].demandValue # suma do ktorej dazymy
-            ratio = demands[i].demandValue / np.sum(demand)
+        else:
+            for i, demand in enumerate(specimen):
+                # demands[i].demandValue # suma do ktorej dazymy
+                ratio = demands[i].demandValue / np.sum(demand)
 
-            # print(demand)
 
-            for j, flow in enumerate(demand):
-                demand[j] = round(demand[j] * ratio)
 
-            # print(demand)
+                for j, flow in enumerate(demand):
+                    demand[j] = round(demand[j] * ratio)
 
-            # print(np.sum(specimen[i]))
-            # print(demands[i].demandValue)
+
+
+
+
 
         return specimen
 
@@ -165,9 +196,12 @@ class DE:
         while generation < self.maxGeneration:
             for i, specimen in enumerate(population.tolist()):
                 specimenIndex = i
-                individuals = self.generate(population, specimenIndex)
-                donorVector = self.mutation(individuals)
-                donorVector = self.repair(donorVector)
+                if self.aggregateFlows:
+                    donorVector = self.mutation(specimen)
+                else:
+                    individuals = self.generate(population, specimenIndex)
+                    donorVector = self.mutationDE(individuals)
+                    donorVector = self.repair(donorVector)
                 trialVector = self.crossover(specimen, donorVector)
                 self.evaluate(trialVector, specimen, population, specimenIndex)
             generation+=1
