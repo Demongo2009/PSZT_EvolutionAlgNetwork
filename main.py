@@ -1,8 +1,3 @@
-# This is a sample Python script.
-
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-import xml.etree.ElementTree as ET
 import xml.dom.minidom
 import numpy as np
 import random
@@ -150,8 +145,6 @@ class EvolutionAlgorithm:
         x_val = self.evaluationFunction(specimen)
         y_val = self.evaluationFunction(trialVector)
 
-        # print(x_val)
-        # print(y_val)
         if y_val <= x_val:
             population[index] = trialVector
 
@@ -215,7 +208,6 @@ class EvolutionAlgorithm:
 
                 self.evaluate(trialVector, specimen, population, specimenIndex)
             generation+=1
-            # print_hi(generation)
         self.seed +=1
         return population
 
@@ -273,8 +265,7 @@ if __name__ == '__main__':
 
     parser.add_option("-i", "--iterations", type="int", dest="iterations", default=10,
                       help="Number of algorithms runs, incrementing seed by 1 (default 10)")
-    # parser.add_option("-l", "--plot", action="store_true", dest="plot", default=False,
-    #                   help="Draw plot")
+
 
     parser.add_option("-s", "--seed", type="int", dest="seed", default=42,
                       help="Initial seed for numpy and random (default 42)")
@@ -292,9 +283,6 @@ if __name__ == '__main__':
     parser.add_option("-w", "--diffWeight", type="float", dest="differentialWeight", default=0.2,
                       help="Differential weight (default 0.2)")
 
-
-    # parser.add_option("-p", "--penaltyFactor", type="float", dest="penaltyFactor", default=100,
-    #                   help="Penalty factor (default 100)")
 
 
     (options, args) = parser.parse_args()
@@ -338,5 +326,3 @@ if __name__ == '__main__':
         else:
             value = EvolutionAlgorithm.evaluationFunction(algorithm,best)
         print("\nValue: " + str(value))
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
