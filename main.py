@@ -178,13 +178,9 @@ class EvolutionAlgorithm:
                 for j, flow in enumerate(demand):
                     demand[j] = round(demand[j] * ratio)
 
-
-
-
-
-
         return specimen
 
+    
     def run(self):
         random.seed(self.seed)
         np.random.seed(self.seed)
