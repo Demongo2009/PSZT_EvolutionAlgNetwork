@@ -8,6 +8,8 @@ import numpy as np
 import random
 import math
 import copy
+from optparse import OptionParser
+
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -27,11 +29,11 @@ class Link:
 
 
 
-class DE:
+class EvolutionAlgorithm:
 
-    def __init__(self, demands, populationSize = 100, crossoverProbability = 0.7,
-                 differentialWeight = 0.2, penaltyFactor = 100, maxGeneration = 2000,
-                 penaltyForBadFlow = 100, modularity = 500, aggregateFlows = True):
+    def __init__(self, demands, populationSize = 150, crossoverProbability = 0.7,
+                 differentialWeight = 0.2, penaltyFactor = 100, maxGeneration = 800,
+                 penaltyForBadFlow = 100, modularity = 200, aggregateFlows = False, seed = 42):
         self.populationSize = populationSize
         self.crossoverProbability = crossoverProbability
         self.differentialWeight = differentialWeight
@@ -45,9 +47,10 @@ class DE:
         self.minValue = 0
         self.maxValue = max([x.demandValue for x in demands])
         self.numberOfDemands = len(demands)
+        self.seed = seed
 
 
-    def evaluationFunction(self, specimen):
+    def evaluationFunction(self, specimen, showLinks = False):
         numberOfSystems = 0
 
         listOfLinks = []
@@ -77,11 +80,11 @@ class DE:
 
         # for every loaded link add system depending on modularity
         for link in listOfLinks:
+            if showLinks:
+                print("Link: " + str(link.name) + "\nLoad: " + str(link.flowLoad))
             numberOfSystems += math.ceil(link.flowLoad / self.modularity)
 
         return numberOfSystems
-
-
 
 
     def initialization(self):
@@ -99,6 +102,7 @@ class DE:
                              self.differentialWeight * np.array(np.subtract(individuals[1], individuals[2])))
 
         return donorVector
+
 
     def mutation(self, specimen):
         donorVector = copy.deepcopy(specimen)
@@ -189,13 +193,18 @@ class DE:
         return specimen
 
     def run(self):
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+
         population = self.initialization()
         for i, specimen in enumerate(population.tolist()):
             population[i] = self.repair(specimen)
+
         generation = 0
         while generation < self.maxGeneration:
             for i, specimen in enumerate(population.tolist()):
                 specimenIndex = i
+
                 if self.aggregateFlows:
                     donorVector = self.mutation(specimen)
                 else:
@@ -203,10 +212,11 @@ class DE:
                     donorVector = self.mutationDE(individuals)
                     donorVector = self.repair(donorVector)
                 trialVector = self.crossover(specimen, donorVector)
+
                 self.evaluate(trialVector, specimen, population, specimenIndex)
             generation+=1
-            print_hi(generation)
-
+            # print_hi(generation)
+        self.seed +=1
         return population
 
 
@@ -250,25 +260,83 @@ def getDemandsFromDoc(doc):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+
+    usage = "usage: %prog [options]\n" \
+            "Debug: -q -d\n" \
+            "Params: -s, -i, -m, -a, -n, -c, -w, -g\n"
+    parser = OptionParser(usage=usage)
+
+    parser.add_option("-q", "--debug", action="store_true", dest="debug", default=False,
+                      help="Prints debug info")
+    parser.add_option("-d", "--demands", action="store_true", dest="demands", default=False,
+                      help="Prints demands")
+
+    parser.add_option("-i", "--iterations", type="int", dest="iterations", default=10,
+                      help="Number of algorithms runs, incrementing seed by 1 (default 10)")
+    # parser.add_option("-l", "--plot", action="store_true", dest="plot", default=False,
+    #                   help="Draw plot")
+
+    parser.add_option("-s", "--seed", type="int", dest="seed", default=42,
+                      help="Initial seed for numpy and random (default 42)")
+    parser.add_option("-m", "--modularity", type="int", dest="modularity", default=1,
+                      help="Modularity for systems counting (default 1)")
+    parser.add_option("-a", "--aggregate", action="store_true", dest="aggregate", default=False,
+                      help="Aggregate flows")
+    parser.add_option("-g", "--generationMax", type="int", dest="generationMax", default=500,
+                      help="Max generations (default 500)")
+
+    parser.add_option("-n", "--popSize", type="int", dest="popSize", default=100,
+                      help="Population size (default 100)")
+    parser.add_option("-c", "--crossover", type="float", dest="crossoverProbability", default=0.7,
+                      help="Crossover probability (default 0.7)")
+    parser.add_option("-w", "--diffWeight", type="float", dest="differentialWeight", default=0.2,
+                      help="Differential weight (default 0.2)")
+
+
+    # parser.add_option("-p", "--penaltyFactor", type="float", dest="penaltyFactor", default=100,
+    #                   help="Penalty factor (default 100)")
+
+
+    (options, args) = parser.parse_args()
+
+    global debug
+    debug = options.debug
+
     doc = xml.dom.minidom.parse('data.xml')
 
     demands = getDemandsFromDoc(doc)
 
-    # value = 0
-    # for d in demands:
-    #     value += d.demandValue
-    # print(value)
+    if options.demands:
+        for d in demands:
+            d.print()
 
 
-    DEalgorithm = DE(demands)
-    population = DEalgorithm.run()
+    algorithm = EvolutionAlgorithm(demands=demands,
+                                   populationSize = options.popSize,
+                                   crossoverProbability = options.crossoverProbability,
+                                   differentialWeight = options.differentialWeight,
+                                   maxGeneration = options.generationMax,
+                                   modularity = options.modularity,
+                                   aggregateFlows = options.aggregate,
+                                   seed = options.seed)
 
-    best = population[0]
-    for specimen in population:
-        if DE.evaluationFunction(DEalgorithm,specimen) < DE.evaluationFunction(DEalgorithm,best):
-            best = specimen
+    iterations = options.iterations
+    for i in range(iterations):
+        population = algorithm.run()
 
-    print(best)
-    print(DE.evaluationFunction(DEalgorithm,best))
+        best = population[0]
+        for specimen in population:
+            if EvolutionAlgorithm.evaluationFunction(algorithm,specimen) < EvolutionAlgorithm.evaluationFunction(algorithm,best):
+                best = specimen
+
+        print("\n#####"+str(i)+"#####")
+        value = 0
+        if debug:
+            print("Best specimen: ")
+            print(str(best)+"\n")
+            value = EvolutionAlgorithm.evaluationFunction(algorithm,best,True)
+        else:
+            value = EvolutionAlgorithm.evaluationFunction(algorithm,best)
+        print("\nValue: " + str(value))
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
